@@ -306,38 +306,6 @@ __kernel void ethash_search(
  
     keccak_f1600(state, 8);
 
-#if THREADS_PER_HASH == 1
-    hash128_t mix;
-    share[hash_id].uint16s[0] = ((uint16 *)state)[0];
-
-    #pragma unroll
-    for(uint i = 0; i < 4; i++) {
-        mix.uint4s[i  ] = share[hash_id].uint4s[i];
-        mix.uint4s[i+4] = share[hash_id].uint4s[i];
-    }
-
-    uint init0 = share[hash_id].uints[0];
-
-    #pragma unroll
-    for(uint i = 0; i < ACCESSES; i++) {
-        uint p = FNV(i ^ init0, mix.uints[i & 31]) % DAG_SIZE;
-  
-        #pragma unroll
-        for(uint j = 0; j < 8; j++) 
-            mix.uint4s[j] = FNV(mix.uint4s[j], g_dag[p].uint4s[j]);
-    }
-
-    #pragma unroll
-    for(uint i = 0; i < 8; i++) {
-        share[hash_id].uints[i] = FNV_REDUCE(mix.uint4s[i]);
-    }
-
-    #pragma unroll
-    for(uint i = 0; i < 4; i++) {
-        (state + 8)[i] = share[hash_id].ulongs[i];
-    }
-
-#else
     #pragma unroll 1
     for (uint tid = 0; tid < THREADS_PER_HASH; tid++) {
         if (tid == thread_id) {
@@ -345,17 +313,12 @@ __kernel void ethash_search(
         }
         mem_fence(CLK_LOCAL_MEM_FENCE);
  
-#if THREADS_PER_HASH == 2
-        uint16 mix = share->uint16s[0];
-#elif THREADS_PER_HASH == 4
-        uint8 mix = share->uint8s[thread_id & 1];
-#elif THREADS_PER_HASH == 8
+#if THREADS_PER_HASH == 8
         uint4 mix = share->uint4s[thread_id & 3];
 #elif THREADS_PER_HASH == 16
-        uint8 mix = share->uints[thread_id & 7];
+        uint2 mix = share->uint2s[thread_id & 7];
 #endif
         mem_fence(CLK_LOCAL_MEM_FENCE);
- 
         uint init0 = share->uints[0];
         mem_fence(CLK_LOCAL_MEM_FENCE);
  
@@ -370,28 +333,19 @@ __kernel void ethash_search(
                 }
                 mem_fence(CLK_LOCAL_MEM_FENCE);
 
-#if THREADS_PER_HASH == 2
-                mix = FNV(mix, g_dag[share->uints[0]].uint16s[thread_id]);
-#elif THREADS_PER_HASH == 4
-                mix = FNV(mix, g_dag[share->uints[0]].uint8s[thread_id]);
-#elif THREADS_PER_HASH == 8
+#if THREADS_PER_HASH == 8
                 mix = FNV(mix, g_dag[share->uints[0]].uint4s[thread_id]);
+#elif THREADS_PER_HASH == 16
+                mix = FNV(mix, g_dag[share->uints[0]].uint2s[thread_id]);
 #endif
                 mem_fence(CLK_LOCAL_MEM_FENCE);
             }
         }
  
-#if THREADS_PER_HASH == 2
-        share->uint4s[thread_id] = (uint4)(
-            FNV_REDUCE(mix.s0123),
-            FNV_REDUCE(mix.s4567),
-            FNV_REDUCE(mix.s89ab),
-            FNV_REDUCE(mix.scdef)
-        );
-#elif THREADS_PER_HASH == 4
-		    share->uint2s[thread_id] = (uint2)(FNV_REDUCE(mix.lo), FNV_REDUCE(mix.hi));
-#elif THREADS_PER_HASH == 8
+#if THREADS_PER_HASH == 8
         share->uints[thread_id] = FNV_REDUCE(mix);
+#elif THREADS_PER_HASH == 16
+	share->uints[thread_id] = FNV(mix.lo, mix.hi);
 #endif
         mem_fence(CLK_LOCAL_MEM_FENCE);
  
@@ -400,7 +354,6 @@ __kernel void ethash_search(
         }
         mem_fence(CLK_LOCAL_MEM_FENCE);
     }
- #endif
 
     for (uint i = 13; i != 25; ++i) {
         state[i] = 0;

@@ -300,7 +300,7 @@ public:
 			try {
 				m_openclThreadsPerHash = stol(argv[++i]);
 				if(m_openclThreadsPerHash != 1 && m_openclThreadsPerHash != 2 &&
-				   m_openclThreadsPerHash != 4 && m_openclThreadsPerHash != 8) {
+				   m_openclThreadsPerHash != 16 && m_openclThreadsPerHash != 8) {
 					BOOST_THROW_EXCEPTION(BadArgument());
 				}
 			}

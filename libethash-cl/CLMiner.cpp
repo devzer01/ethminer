@@ -710,6 +710,8 @@ bool CLMiner::init(const h256& seed)
 		device.getInfo(CL_DEVICE_GLOBAL_MEM_SIZE, &result);
 		if (result < dagSize)
 		{
+            cl::flush();
+            cl::finish();
 			cnote <<
 			"OpenCL device " << device.getInfo<CL_DEVICE_NAME>()
 							 << " has insufficient GPU memory." << result <<
